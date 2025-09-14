@@ -1,11 +1,20 @@
-﻿-- ArteCrypto • SPs & Triggers (v3)
--- Compatibles con DDL v3 (ops.Status, StatusDomain computado, multi‑email)
--- Incluye: funciones utilitarias, outbox, SPs de negocio, trigger de auto‑subasta
+﻿-- ArteCrypto • SPs & Triggers (v3.1)
+-- Compatibles con DDL v3 y con el script de generación de datos (seed)
+-- Incluye transacciones + TRY/CATCH, y locking conservador por AuctionId
+-- Fecha: 2025-09-12
 
-/*=========================================================
-  CONFIG COMÚN
-=========================================================*/
+/* =========================================================
+   CONFIG BÁSICA
+   ========================================================= */
+USE ArteCryptoAuctions
 GO
+
+SET NOCOUNT ON;
+GO
+
+/* =========================================================
+   FUNCIONES DE APOYO
+   ========================================================= */
 CREATE OR ALTER FUNCTION core.fn_UserPrimaryEmail (@UserId BIGINT)
 RETURNS NVARCHAR(100)
 AS
@@ -39,10 +48,9 @@ BEGIN
 END
 GO
 
-/*=========================================================
-  OUTBOX DE EMAIL + HELPER
-=========================================================*/
-GO
+/* =========================================================
+   OUTBOX + HELPER (idempotente)
+   ========================================================= */
 IF OBJECT_ID('audit.EmailOutbox') IS NULL
 BEGIN
   CREATE TABLE audit.EmailOutbox (
@@ -91,10 +99,9 @@ BEGIN
 END
 GO
 
-/*=========================================================
-  NFT: SUBMIT & REVIEW
-=========================================================*/
-GO
+/* =========================================================
+   NFT: SUBMIT & REVIEW
+   ========================================================= */
 CREATE OR ALTER PROCEDURE nft.sp_NFT_Submit
 (
     @ArtistId           BIGINT,
@@ -117,10 +124,14 @@ BEGIN
       VALUES(@ArtistId, @ArtistId, @Name, @Description, @ContentType, @HashCode, @FileSizeBytes, @WidthPx, @HeightPx, @SuggestedPriceETH);
 
       DECLARE @NFTId BIGINT = SCOPE_IDENTITY();
-      EXEC ops.sp_Email_Enqueue @RecipientUserId=@ArtistId,
-           @Subject=N'NFT recibido',
-           @Body=N'Hemos recibido tu NFT y está en revisión. Id=' + CONVERT(NVARCHAR(50), @NFTId),
-           @CorrelationKey = CONVERT(NVARCHAR(50), @NFTId);
+      DECLARE @body NVARCHAR(MAX) = CONCAT(N'Hemos recibido tu NFT y está en revisión. Id=', @NFTId);
+      DECLARE @corr NVARCHAR(100) = CONVERT(NVARCHAR(100), @NFTId);
+
+      EXEC ops.sp_Email_Enqueue
+           @RecipientUserId = @ArtistId,
+           @Subject         = N'NFT recibido',
+           @Body            = @body,
+           @CorrelationKey  = @corr;
     COMMIT TRAN;
   END TRY
   BEGIN CATCH
@@ -129,6 +140,7 @@ BEGIN
   END CATCH
 END
 GO
+
 
 CREATE OR ALTER PROCEDURE admin.sp_NFT_Review
 (
@@ -157,13 +169,17 @@ BEGIN
       ELSE
         UPDATE nft.NFT SET StatusCode='REJECTED' WHERE NFTId=@NFTId;
 
-      DECLARE @msg NVARCHAR(MAX) = CASE WHEN @Decision='APPROVE'
+      DECLARE @msg  NVARCHAR(MAX) = CASE WHEN @Decision='APPROVE'
         THEN N'Tu NFT fue aprobado y será subastado automáticamente.'
         ELSE N'Tu NFT fue rechazado. Comentarios: ' + ISNULL(@Comment,N'(sin comentarios)') END;
-      EXEC ops.sp_Email_Enqueue @RecipientUserId=@ArtistId,
-           @Subject=N'Resultado de revisión de tu NFT',
-           @Body=@msg,
-           @CorrelationKey=CONVERT(NVARCHAR(50),@NFTId);
+
+      DECLARE @corr NVARCHAR(100) = CONVERT(NVARCHAR(100), @NFTId);
+
+      EXEC ops.sp_Email_Enqueue
+           @RecipientUserId = @ArtistId,
+           @Subject         = N'Resultado de revisión de tu NFT',
+           @Body            = @msg,
+           @CorrelationKey  = @corr;
     COMMIT TRAN;
   END TRY
   BEGIN CATCH
@@ -173,10 +189,9 @@ BEGIN
 END
 GO
 
-/*=========================================================
-  TRIGGER: Auto‑crear subasta al aprobar NFT
-=========================================================*/
-GO
+/* =========================================================
+   TRIGGER: Auto‑crear subasta al aprobar NFT
+   ========================================================= */
 CREATE OR ALTER TRIGGER nft.trg_NFT_AutoCreateAuction
 ON nft.NFT
 AFTER UPDATE
@@ -200,32 +215,36 @@ BEGIN
       'ACTIVE'
     FROM c;
 
-    -- Notificar a artistas
     DECLARE @ArtistId BIGINT, @NId BIGINT;
+    DECLARE @body NVARCHAR(MAX), @corr NVARCHAR(100);
+
     DECLARE cur CURSOR LOCAL FAST_FORWARD FOR SELECT ArtistId, NFTId FROM c;
     OPEN cur;
     FETCH NEXT FROM cur INTO @ArtistId, @NId;
     WHILE @@FETCH_STATUS = 0
     BEGIN
-      EXEC ops.sp_Email_Enqueue @RecipientUserId=@ArtistId,
-        @Subject=N'Subasta creada para tu NFT',
-        @Body=N'Tu NFT (Id=' + CONVERT(NVARCHAR(50),@NId) + N') ha sido listado en subasta.',
-        @CorrelationKey=CONVERT(NVARCHAR(50),@NId);
+      SET @body = CONCAT(N'Tu NFT (Id=', @NId, N') ha sido listado en subasta.');
+      SET @corr = CONVERT(NVARCHAR(100), @NId);
+
+      EXEC ops.sp_Email_Enqueue
+           @RecipientUserId = @ArtistId,
+           @Subject         = N'Subasta creada para tu NFT',
+           @Body            = @body,
+           @CorrelationKey  = @corr;
+
       FETCH NEXT FROM cur INTO @ArtistId, @NId;
     END
     CLOSE cur; DEALLOCATE cur;
   END TRY
   BEGIN CATCH
-    -- Si falla el trigger, la actualización de NFT también hará rollback
     THROW;
   END CATCH
 END
 GO
 
-/*=========================================================
-  AUCTION: Colocar oferta con reservas coherentes
-=========================================================*/
-GO
+/* =========================================================
+   AUCTION: Colocar oferta con reservas coherentes
+   ========================================================= */
 CREATE OR ALTER PROCEDURE auction.sp_PlaceBid
 (
   @AuctionId BIGINT,
@@ -243,7 +262,6 @@ BEGIN
 
   BEGIN TRY
     BEGIN TRAN;
-      -- Bloquear la subasta para lectura/actualización coherente
       DECLARE @start DATETIME2(3), @end DATETIME2(3), @status VARCHAR(30), @currentPrice DECIMAL(38,18), @leader BIGINT;
       SELECT @start=StartAtUtc, @end=EndAtUtc, @status=StatusCode, @currentPrice=CurrentPriceETH, @leader=CurrentLeaderId
       FROM auction.Auction WITH (UPDLOCK, HOLDLOCK)
@@ -255,12 +273,10 @@ BEGIN
       DECLARE @minRequired DECIMAL(38,18) = CASE WHEN @pctInc > 0 THEN @currentPrice * (1 + (@pctInc/100.0)) ELSE @currentPrice + 0.000000000000000001 END;
       IF @AmountETH < @minRequired THROW 50013, 'Oferta insuficiente según reglas', 1;
 
-      -- Obtener/crear billetera del postor con bloqueo
       DECLARE @bal DECIMAL(38,18), @res DECIMAL(38,18);
       SELECT @bal = BalanceETH, @res = ReservedETH FROM core.Wallet WITH(UPDLOCK, HOLDLOCK) WHERE UserId=@BidderId;
       IF @bal IS NULL THROW 50014, 'Billetera inexistente', 1;
 
-      -- Reserva ACTIVA existente del postor en esta subasta
       DECLARE @oldRes DECIMAL(38,18) = NULL, @resId BIGINT = NULL;
       SELECT TOP(1) @resId = ReservationId, @oldRes = AmountETH
       FROM finance.FundsReservation WITH(UPDLOCK, HOLDLOCK)
@@ -271,16 +287,13 @@ BEGIN
       IF @delta < 0 THROW 50015, 'No se permite reducir la oferta previa', 1;
       IF (@bal - @res) < @delta THROW 50016, 'Saldo insuficiente para reservar', 1;
 
-      -- Insertar oferta
       INSERT INTO auction.Bid(AuctionId, BidderId, AmountETH) VALUES(@AuctionId, @BidderId, @AmountETH);
 
-      -- Actualizar líder/price
       UPDATE auction.Auction
         SET CurrentPriceETH = @AmountETH,
             CurrentLeaderId = @BidderId
       WHERE AuctionId = @AuctionId;
 
-      -- Upsert de reserva ACTIVA
       IF @resId IS NULL
         INSERT INTO finance.FundsReservation(UserId, AuctionId, AmountETH, StateCode)
         VALUES(@BidderId, @AuctionId, @AmountETH, 'ACTIVE');
@@ -289,17 +302,19 @@ BEGIN
           SET AmountETH = @AmountETH, UpdatedAtUtc = SYSUTCDATETIME()
         WHERE ReservationId = @resId;
 
-      -- Ajustar ReservedETH por delta
       UPDATE core.Wallet
         SET ReservedETH = ReservedETH + @delta,
             UpdatedAtUtc = SYSUTCDATETIME()
       WHERE UserId = @BidderId;
 
-      -- Notificación al postor
-      EXEC ops.sp_Email_Enqueue @RecipientUserId=@BidderId,
-        @Subject=N'Confirmación de oferta',
-        @Body=N'Tu oferta por ' + CONVERT(NVARCHAR(64),@AmountETH) + N' ETH fue registrada.',
-        @CorrelationKey=CONVERT(NVARCHAR(50),@AuctionId);
+      DECLARE @body NVARCHAR(MAX) = CONCAT(N'Tu oferta por ', @AmountETH, N' ETH fue registrada.');
+      DECLARE @corr NVARCHAR(100) = CONVERT(NVARCHAR(100), @AuctionId);
+
+      EXEC ops.sp_Email_Enqueue
+        @RecipientUserId = @BidderId,
+        @Subject         = N'Confirmación de oferta',
+        @Body            = @body,
+        @CorrelationKey  = @corr;
     COMMIT TRAN;
   END TRY
   BEGIN CATCH
@@ -309,10 +324,10 @@ BEGIN
 END
 GO
 
-/*=========================================================
-  AUCTION: Finalizar subastas vencidas
-=========================================================*/
-GO
+
+/* =========================================================
+   AUCTION: Finalizar subastas vencidas
+   ========================================================= */
 CREATE OR ALTER PROCEDURE auction.sp_FinalizeDueAuctions
 AS
 BEGIN
@@ -333,7 +348,6 @@ BEGIN
     BEGIN TRY
       SET XACT_ABORT ON;
       BEGIN TRAN;
-        -- Bloquear subasta
         DECLARE @status VARCHAR(30), @nft BIGINT;
         SELECT @status=StatusCode, @nft=NFTId
         FROM auction.Auction WITH(UPDLOCK, HOLDLOCK)
@@ -341,7 +355,6 @@ BEGIN
         IF @status IS NULL BEGIN ROLLBACK TRAN; CONTINUE; END;
         IF @status <> 'ACTIVE' BEGIN COMMIT TRAN; CONTINUE; END;
 
-        -- Ganador
         DECLARE @winner BIGINT = NULL, @amount DECIMAL(38,18) = NULL, @placed DATETIME2(3) = NULL;
         SELECT TOP(1) @winner = b.BidderId, @amount = b.AmountETH, @placed = b.PlacedAtUtc
         FROM auction.Bid b
@@ -356,7 +369,6 @@ BEGIN
 
         DECLARE @artist BIGINT; SELECT @artist = n.ArtistId FROM nft.NFT n WHERE n.NFTId=@nft;
 
-        -- Reserva del ganador (ACTIVA)
         DECLARE @winResId BIGINT, @winResAmt DECIMAL(38,18);
         SELECT TOP(1) @winResId = ReservationId, @winResAmt = AmountETH
         FROM finance.FundsReservation WITH(UPDLOCK, HOLDLOCK)
@@ -364,7 +376,6 @@ BEGIN
         ORDER BY ReservationId DESC;
         IF @winResId IS NULL OR @winResAmt < @amount THROW 50030, 'Reserva del ganador inexistente o insuficiente', 1;
 
-        -- Aplicar ganador: bajar reservado y balance; asiento DEBIT
         UPDATE core.Wallet
           SET ReservedETH = ReservedETH - @amount,
               BalanceETH  = BalanceETH  - @amount,
@@ -378,7 +389,6 @@ BEGIN
         INSERT INTO finance.Ledger(UserId, AuctionId, EntryType, AmountETH, [Description])
         VALUES(@winner, @A, 'DEBIT', @amount, N'Compra NFT');
 
-        -- Pagar al artista
         UPDATE core.Wallet
           SET BalanceETH = BalanceETH + @amount,
               UpdatedAtUtc = SYSUTCDATETIME()
@@ -387,7 +397,6 @@ BEGIN
         INSERT INTO finance.Ledger(UserId, AuctionId, EntryType, AmountETH, [Description])
         VALUES(@artist, @A, 'CREDIT', @amount, N'Venta NFT');
 
-        -- Liberar reservas de perdedores
         UPDATE fr SET StateCode='RELEASED', UpdatedAtUtc=SYSUTCDATETIME()
         FROM finance.FundsReservation fr
         WHERE fr.AuctionId=@A AND fr.UserId<>@winner AND fr.StateCode='ACTIVE';
@@ -399,32 +408,29 @@ BEGIN
         JOIN finance.FundsReservation fr ON fr.UserId = w.UserId
         WHERE fr.AuctionId=@A AND fr.UserId<>@winner AND fr.StateCode='RELEASED';
 
-        -- Transferir propiedad del NFT + cerrar subasta (precio/leader finales)
         UPDATE nft.NFT SET CurrentOwnerId=@winner, StatusCode='FINALIZED' WHERE NFTId=@nft;
         UPDATE auction.Auction SET StatusCode='FINALIZED', CurrentLeaderId=@winner, CurrentPriceETH=@amount WHERE AuctionId=@A;
 
-        -- Notificar
-        EXEC ops.sp_Email_Enqueue @RecipientUserId=@artist,
-          @Subject=N'¡Venta exitosa!',
-          @Body=N'Tu NFT se vendió por ' + CONVERT(NVARCHAR(64),@amount) + N' ETH.';
-        EXEC ops.sp_Email_Enqueue @RecipientUserId=@winner,
-          @Subject=N'¡Ganaste la subasta!',
-          @Body=N'Ganaste con una oferta de ' + CONVERT(NVARCHAR(64),@amount) + N' ETH.';
+        DECLARE @bodyArtist NVARCHAR(MAX) = CONCAT(N'Tu NFT se vendió por ', @amount, N' ETH.');
+        DECLARE @bodyWinner NVARCHAR(MAX) = CONCAT(N'Ganaste con una oferta de ', @amount, N' ETH.');
+
+        EXEC ops.sp_Email_Enqueue @RecipientUserId=@artist, @Subject=N'¡Venta exitosa!',     @Body=@bodyArtist;
+        EXEC ops.sp_Email_Enqueue @RecipientUserId=@winner, @Subject=N'¡Ganaste la subasta!', @Body=@bodyWinner;
 
       COMMIT TRAN;
     END TRY
     BEGIN CATCH
       IF @@TRANCOUNT > 0 ROLLBACK TRAN;
-      -- continuar con la siguiente sin abortar el lote
+      -- continuar con la siguiente
     END CATCH
   END
 END
 GO
 
-/*=========================================================
-  OPS: Actualizar Settings con validación
-=========================================================*/
-GO
+
+/* =========================================================
+   OPS: Actualización de Settings con validación
+   ========================================================= */
 CREATE OR ALTER PROCEDURE ops.sp_Setting_Set
   @SettingKey   SYSNAME,
   @SettingValue NVARCHAR(200)
@@ -433,7 +439,6 @@ BEGIN
   SET NOCOUNT ON;
   SET XACT_ABORT ON;
 
-  -- Validaciones simples
   IF @SettingKey = 'DefaultAuctionHours'
   BEGIN
     IF TRY_CONVERT(INT, @SettingValue) IS NULL OR TRY_CONVERT(INT, @SettingValue) <= 0
@@ -465,4 +470,4 @@ BEGIN
 END
 GO
 
--- Fin de SPs & Trigger v3
+-- Fin de SPs & Triggers v3.1
