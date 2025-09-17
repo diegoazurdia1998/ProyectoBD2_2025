@@ -11,7 +11,7 @@ GO
    ========================================================= */
 DECLARE @Artists            INT = 8;    -- # de artistas
 DECLARE @Curators           INT = 3;    -- # de curadores
-DECLARE @Collectors         INT = 25;   -- # de coleccionistas
+DECLARE @Collectors         INT = 35;   -- # de coleccionistas
 DECLARE @NFTsPerArtist      INT = 6;    -- NFTs por artista
 DECLARE @ApproveRatio       DECIMAL(5,2) = 0.75; -- % de NFTs que se aprueban
 DECLARE @MinBidsPerAuction  INT = 3;    -- mínimo de pujas por subasta
@@ -30,12 +30,12 @@ DECLARE @BatchTag NVARCHAR(20) = FORMAT(SYSUTCDATETIME(),'yyyyMMddHHmmss');
    ========================================================= */
 IF OBJECT_ID('ops.fn_Series','IF') IS NULL
     EXEC('CREATE FUNCTION ops.fn_Series(@count INT) RETURNS TABLE AS RETURN ( SELECT TOP (@count) ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) AS n FROM sys.all_objects a CROSS JOIN sys.all_objects b );');
-GO
+
 
 -- Rand determinista por fila con NEWID() + semilla
 IF OBJECT_ID('ops.fn_Rand01','IF') IS NULL
     EXEC('CREATE FUNCTION ops.fn_Rand01(@seed NVARCHAR(100)) RETURNS DECIMAL(9,6) AS BEGIN RETURN ABS(CONVERT(DECIMAL(9,6), CONVERT(BIGINT, CONVERT(VARBINARY(8), HASHBYTES(''SHA2_256'', @seed)))) % 1000000) / 1000000 END');
-GO
+
 
 /* =========================================================
    ROLES (idempotente)

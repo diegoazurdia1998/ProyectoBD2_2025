@@ -21,7 +21,7 @@ NOTAS:
 - Todo dinámico a partir de sys.schemas/sys.tables/sys.foreign_keys.
 *****************************************************************************************/
 
-DECLARE @ACTION           NVARCHAR(20) = 'DROP_DATABASE';  -- 'DROP_DATABASE' | 'DROP_TABLES' | 'DELETE_DATA'
+DECLARE @ACTION           NVARCHAR(20) = 'DELETE_DATA';  -- 'DROP_DATABASE' | 'DROP_TABLES' | 'DELETE_DATA'
 DECLARE @DATABASE_NAME    SYSNAME      = DB_NAME();      -- Cambia si vas a dropear otra BD
 DECLARE @IUnderstand      BIT          = 1;              -- PON EN 1 PARA PERMITIR LA ACCIÓN
 DECLARE @IncludeCatalogs  BIT          = 0;              -- Incluir ops.Status/ops.Settings (0=recomendado)
