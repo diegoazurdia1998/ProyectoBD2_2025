@@ -474,3 +474,34 @@ CREATE INDEX [IX_EmailOutbox_Pending]
   ON [audit].[EmailOutbox]([StatusCode])
   WHERE [StatusCode] = 'PENDING';
 GO
+
+-- Status base (Domain, Code, Desc)
+
+MERGE ops.[Status] AS t
+USING (VALUES
+  ('NFT','PENDING',    N'NFT en revisión'),
+  ('NFT','APPROVED',   N'NFT aprobado'),
+  ('NFT','REJECTED',   N'NFT rechazado'),
+  ('NFT','FINALIZED',  N'NFT finalizado'),
+
+  ('AUCTION','ACTIVE',    N'Subasta activa'),
+  ('AUCTION','FINALIZED', N'Subasta finalizada'),
+  ('AUCTION','CANCELED',  N'Subasta cancelada'),
+
+  ('FUNDS_RESERVATION','ACTIVE',   N'Reserva activa'),
+  ('FUNDS_RESERVATION','RELEASED', N'Reserva liberada'),
+  ('FUNDS_RESERVATION','APPLIED',  N'Reserva aplicada'),
+
+  ('USER_EMAIL','ACTIVE',  N'Email activo'),
+  ('USER_EMAIL','INACTIVE',N'Email inactivo'),
+
+  ('EMAIL_OUTBOX','PENDING', N'Correo en cola'),
+  ('EMAIL_OUTBOX','SENT',    N'Correo enviado'),
+  ('EMAIL_OUTBOX','FAILED',  N'Fallo de envío'),
+
+  ('CURATION_DECISION', 'APPROVE', N'NFT aprovó la curacion'),
+  ('CURATION_DECISION', 'REJECT', N'NFT no aprovo la curacion')
+) AS s([Domain],[Code],[Description])
+ON (t.[Domain]=s.[Domain] AND t.[Code]=s.[Code])
+WHEN NOT MATCHED THEN INSERT([Domain],[Code],[Description]) VALUES(s.[Domain],s.[Code],s.[Description]);
+GO
