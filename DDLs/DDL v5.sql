@@ -1,13 +1,23 @@
--- USE ArteCryptoAuctions;
+CREATE DATABASE ArteCryptoAuctions
+GO
 
+USE ArteCryptoAuctions;
+GO
 -- 1) Esquemas
 CREATE SCHEMA admin; 
+GO
 CREATE SCHEMA auction;
+GO
 CREATE SCHEMA audit;
+GO
 CREATE SCHEMA core;
+GO
 CREATE SCHEMA finance;
+GO
 CREATE SCHEMA nft;
+GO
 CREATE SCHEMA ops;
+GO
 
 --------------------------------------------------------------------------------
 -- 2) Catálogos operativos
@@ -124,7 +134,7 @@ CREATE TABLE admin.CurationReview (
 --------------------------------------------------------------------------------
 -- 5) Configuración y subastas
 --------------------------------------------------------------------------------
-CREATE TABLE dbo.AuctionSettings (
+CREATE TABLE auction.AuctionSettings (
   SettingsID           int          NOT NULL PRIMARY KEY,
   CompanyName          nvarchar(250) NOT NULL,         -- <— simplificado desde varbinary(250)
   BasePriceETH         decimal(38,18) NOT NULL,
@@ -145,7 +155,7 @@ CREATE TABLE auction.Auction (
   StatusCode       varchar(30)   NOT NULL DEFAULT 'ACTIVE',
   StatusDomain     AS CONVERT(varchar(50), 'AUCTION') PERSISTED,
   CONSTRAINT UQ_Auction_NFT UNIQUE (NFTId),
-  CONSTRAINT FK_Auction_Settings FOREIGN KEY (SettingsID)      REFERENCES dbo.AuctionSettings(SettingsID),
+  CONSTRAINT FK_Auction_Settings FOREIGN KEY (SettingsID)      REFERENCES auction.AuctionSettings(SettingsID),
   CONSTRAINT FK_Auction_NFT      FOREIGN KEY (NFTId)           REFERENCES nft.NFT(NFTId),
   CONSTRAINT FK_Auction_Leader   FOREIGN KEY (CurrentLeaderId) REFERENCES core.[User](UserId),
   CONSTRAINT FK_Auction_Status   FOREIGN KEY (StatusDomain, StatusCode)
