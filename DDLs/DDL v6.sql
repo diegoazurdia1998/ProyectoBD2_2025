@@ -4,6 +4,9 @@
 -- Fecha: 2025-01-05
 -- =====================================================================================
 
+CREATE DATABASE ArteCryptoAuctions;
+GO
+
 USE ArteCryptoAuctions;
 GO
 
