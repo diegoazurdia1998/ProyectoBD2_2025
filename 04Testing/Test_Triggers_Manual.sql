@@ -94,7 +94,7 @@ PRINT '  Oferente 1 (ID: ' + CAST(@Bidder1 AS VARCHAR) + ') - luis@test.com';
 PRINT '  Oferente 2 (ID: ' + CAST(@Bidder2 AS VARCHAR) + ') - sofia@test.com';
 PRINT '  Oferente 3 (ID: ' + CAST(@Bidder3 AS VARCHAR) + ') - diego@test.com';
 PRINT '';
-PRINT '✓ Preparación completada. Ahora puedes ejecutar los siguientes pasos.';
+PRINT 'Preparación completada. Ahora puedes ejecutar los siguientes pasos.';
 PRINT '';
 GO
 
@@ -140,7 +140,7 @@ VALUES(
     SYSUTCDATETIME()
 );
 
-PRINT '✓ NFT insertado';
+PRINT 'NFT insertado';
 PRINT '';
 
 -- Verificar resultados
@@ -210,7 +210,7 @@ SET
     Comment = 'Excelente obra de arte, aprobada para subasta'
 WHERE ReviewId = @ReviewId;
 
-PRINT '✓ NFT aprobado por el curador';
+PRINT 'NFT aprobado por el curador';
 PRINT '';
 
 -- Verificar resultados
@@ -398,9 +398,9 @@ VALUES(@AuctionId2, @TestBidder, @CurrentPrice2 - 0.1);
 
 -- Verificar que NO se insertó
 IF NOT EXISTS (SELECT 1 FROM auction.Bid WHERE AuctionId = @AuctionId2 AND AmountETH = @CurrentPrice2 - 0.1)
-    PRINT '✓ Oferta rechazada correctamente (menor al precio actual)';
+    PRINT 'Oferta rechazada correctamente (menor al precio actual)';
 ELSE
-    PRINT '✗ ERROR: Oferta inválida fue aceptada';
+    PRINT 'ERROR: Oferta inválida fue aceptada';
 PRINT '';
 
 -- Ver email de rechazo
@@ -510,6 +510,6 @@ FROM audit.EmailOutbox;
 PRINT '';
 
 PRINT '=====================================================================================';
-PRINT '✓ PRUEBAS MANUALES COMPLETADAS';
+PRINT 'PRUEBAS MANUALES COMPLETADAS';
 PRINT '=====================================================================================';
 GO

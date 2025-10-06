@@ -29,8 +29,8 @@ DELETE FROM nft.NFT;
 DELETE FROM core.Wallet;
 DELETE FROM core.UserEmail;
 DELETE FROM core.UserRole;
-DELETE FROM core.[User];
 DELETE FROM audit.EmailOutbox;
+DELETE FROM core.[User];
 
 PRINT 'Datos de prueba anteriores eliminados.';
 PRINT '';
@@ -201,27 +201,27 @@ BEGIN TRY
     INSERT INTO nft.NFT(ArtistId, SettingsID, [Name], [Description], ContentType, FileSizeBytes, WidthPx, HeightPx, SuggestedPriceETH, StatusCode, CreatedAtUtc)
     VALUES(@ArtistId1, 1, 'Obra Maestra Digital', 'Una hermosa obra de arte digital', 'image/png', 2048000, 1920, 1080, 0.5, 'PENDING', SYSUTCDATETIME());
     
-    PRINT '✓ NFT insertado correctamente';
+    PRINT 'NFT insertado correctamente';
     
     -- Verificar que se creó el NFT
     IF EXISTS (SELECT 1 FROM nft.NFT WHERE ArtistId = @ArtistId1 AND [Name] = 'Obra Maestra Digital')
-        PRINT '✓ NFT encontrado en la tabla nft.NFT';
+        PRINT 'NFT encontrado en la tabla nft.NFT';
     ELSE
-        PRINT '✗ ERROR: NFT no encontrado';
+        PRINT 'ERROR: NFT no encontrado';
     
     -- Verificar que se asignó un curador
     IF EXISTS (SELECT 1 FROM admin.CurationReview WHERE NFTId = (SELECT NFTId FROM nft.NFT WHERE ArtistId = @ArtistId1 AND [Name] = 'Obra Maestra Digital'))
-        PRINT '✓ Registro de curación creado';
+        PRINT 'Registro de curación creado';
     ELSE
-        PRINT '✗ ERROR: No se creó registro de curación';
+        PRINT 'ERROR: No se creó registro de curación';
     
     -- Verificar emails enviados
     DECLARE @EmailCount INT = (SELECT COUNT(*) FROM audit.EmailOutbox);
-    PRINT '✓ Emails generados: ' + CAST(@EmailCount AS VARCHAR) + ' (esperados: 2 - artista + curador)';
+    PRINT 'Emails generados: ' + CAST(@EmailCount AS VARCHAR) + ' (esperados: 2 - artista + curador)';
     
 END TRY
 BEGIN CATCH
-    PRINT '✗ ERROR: ' + ERROR_MESSAGE();
+    PRINT 'ERROR: ' + ERROR_MESSAGE();
 END CATCH
 PRINT '';
 
@@ -234,19 +234,19 @@ BEGIN TRY
     
     -- Verificar que NO se insertó
     IF NOT EXISTS (SELECT 1 FROM nft.NFT WHERE ArtistId = @ArtistId3)
-        PRINT '✓ NFT correctamente rechazado (usuario sin rol ARTIST)';
+        PRINT 'NFT correctamente rechazado (usuario sin rol ARTIST)';
     ELSE
-        PRINT '✗ ERROR: NFT insertado cuando debería ser rechazado';
+        PRINT 'ERROR: NFT insertado cuando debería ser rechazado';
     
     -- Verificar email de notificación
     IF EXISTS (SELECT 1 FROM audit.EmailOutbox WHERE RecipientUserId = @ArtistId3 AND [Subject] LIKE '%Rol Inválido%')
-        PRINT '✓ Email de rechazo enviado al usuario';
+        PRINT 'Email de rechazo enviado al usuario';
     ELSE
-        PRINT '✗ ERROR: No se envió email de notificación';
+        PRINT 'ERROR: No se envió email de notificación';
     
 END TRY
 BEGIN CATCH
-    PRINT '✗ ERROR: ' + ERROR_MESSAGE();
+    PRINT 'ERROR: ' + ERROR_MESSAGE();
 END CATCH
 PRINT '';
 
@@ -260,19 +260,19 @@ BEGIN TRY
     
     -- Verificar que NO se insertó
     IF NOT EXISTS (SELECT 1 FROM nft.NFT WHERE ArtistId = @ArtistId2 AND [Name] = 'Obra Muy Grande')
-        PRINT '✓ NFT correctamente rechazado (dimensiones inválidas)';
+        PRINT 'NFT correctamente rechazado (dimensiones inválidas)';
     ELSE
-        PRINT '✗ ERROR: NFT insertado con dimensiones inválidas';
+        PRINT 'ERROR: NFT insertado con dimensiones inválidas';
     
     -- Verificar email de notificación
     IF EXISTS (SELECT 1 FROM audit.EmailOutbox WHERE RecipientUserId = @ArtistId2 AND [Subject] LIKE '%Validación Técnica%')
-        PRINT '✓ Email de rechazo enviado al artista';
+        PRINT 'Email de rechazo enviado al artista';
     ELSE
-        PRINT '✗ ERROR: No se envió email de notificación';
+        PRINT 'ERROR: No se envió email de notificación';
     
 END TRY
 BEGIN CATCH
-    PRINT '✗ ERROR: ' + ERROR_MESSAGE();
+    PRINT 'ERROR: ' + ERROR_MESSAGE();
 END CATCH
 PRINT '';
 
@@ -287,7 +287,7 @@ BEGIN TRY
         (@ArtistId2, 1, 'Obra Digital 2', 'Segunda obra', 'image/png', 2048000, 1920, 1080, 0.4, 'PENDING', SYSUTCDATETIME()),
         (@ArtistId2, 1, 'Obra Digital 3', 'Tercera obra', 'image/png', 2048000, 1920, 1080, 0.6, 'PENDING', SYSUTCDATETIME());
     
-    PRINT '✓ 3 NFTs insertados correctamente';
+    PRINT '3 NFTs insertados correctamente';
     
     -- Verificar distribución de curadores
     SELECT 
@@ -303,11 +303,11 @@ BEGIN TRY
     )
     GROUP BY cr.CuratorId, u.FullName;
     
-    PRINT '✓ Distribución Round-Robin verificada (ver tabla arriba)';
+    PRINT 'Distribución Round-Robin verificada (ver tabla arriba)';
     
 END TRY
 BEGIN CATCH
-    PRINT '✗ ERROR: ' + ERROR_MESSAGE();
+    PRINT 'ERROR: ' + ERROR_MESSAGE();
 END CATCH
 PRINT '';
 
@@ -336,19 +336,19 @@ BEGIN TRY
     
     -- Verificar que el NFT cambió a APPROVED
     IF EXISTS (SELECT 1 FROM nft.NFT WHERE NFTId = @NFTId1 AND StatusCode = 'APPROVED')
-        PRINT '✓ NFT aprobado correctamente';
+        PRINT 'NFT aprobado correctamente';
     ELSE
-        PRINT '✗ ERROR: NFT no cambió a estado APPROVED';
+        PRINT 'ERROR: NFT no cambió a estado APPROVED';
     
     -- Verificar emails
     IF EXISTS (SELECT 1 FROM audit.EmailOutbox WHERE [Subject] LIKE '%Aprobado%')
-        PRINT '✓ Email de aprobación enviado';
+        PRINT 'Email de aprobación enviado';
     ELSE
-        PRINT '✗ ERROR: No se envió email de aprobación';
+        PRINT 'ERROR: No se envió email de aprobación';
     
 END TRY
 BEGIN CATCH
-    PRINT '✗ ERROR: ' + ERROR_MESSAGE();
+    PRINT 'ERROR: ' + ERROR_MESSAGE();
 END CATCH
 PRINT '';
 
@@ -369,19 +369,19 @@ BEGIN TRY
     
     -- Verificar que el NFT cambió a REJECTED
     IF EXISTS (SELECT 1 FROM nft.NFT WHERE NFTId = @NFTId2 AND StatusCode = 'REJECTED')
-        PRINT '✓ NFT rechazado correctamente';
+        PRINT 'NFT rechazado correctamente';
     ELSE
-        PRINT '✗ ERROR: NFT no cambió a estado REJECTED';
+        PRINT 'ERROR: NFT no cambió a estado REJECTED';
     
     -- Verificar emails
     IF EXISTS (SELECT 1 FROM audit.EmailOutbox WHERE [Subject] LIKE '%No Aprobado%')
-        PRINT '✓ Email de rechazo enviado';
+        PRINT 'Email de rechazo enviado';
     ELSE
-        PRINT '✗ ERROR: No se envió email de rechazo';
+        PRINT 'ERROR: No se envió email de rechazo';
     
 END TRY
 BEGIN CATCH
-    PRINT '✗ ERROR: ' + ERROR_MESSAGE();
+    PRINT 'ERROR: ' + ERROR_MESSAGE();
 END CATCH
 PRINT '';
 
@@ -403,7 +403,7 @@ BEGIN TRY
     -- Verificar que se creó la subasta
     IF EXISTS (SELECT 1 FROM auction.Auction WHERE NFTId = @ApprovedNFTId)
     BEGIN
-        PRINT '✓ Subasta creada automáticamente';
+        PRINT 'Subasta creada automáticamente';
         
         -- Mostrar detalles de la subasta
         SELECT 
@@ -417,18 +417,18 @@ BEGIN TRY
         FROM auction.Auction
         WHERE NFTId = @ApprovedNFTId;
         
-        PRINT '✓ Detalles de subasta mostrados arriba';
+        PRINT 'Detalles de subasta mostrados arriba';
     END
     ELSE
-        PRINT '✗ ERROR: No se creó la subasta automáticamente';
+        PRINT 'ERROR: No se creó la subasta automáticamente';
     
     -- Verificar emails (artista + bidders)
     DECLARE @AuctionEmailCount INT = (SELECT COUNT(*) FROM audit.EmailOutbox WHERE [Subject] LIKE '%Subasta%');
-    PRINT '✓ Emails de subasta enviados: ' + CAST(@AuctionEmailCount AS VARCHAR);
+    PRINT 'Emails de subasta enviados: ' + CAST(@AuctionEmailCount AS VARCHAR);
     
 END TRY
 BEGIN CATCH
-    PRINT '✗ ERROR: ' + ERROR_MESSAGE();
+    PRINT 'ERROR: ' + ERROR_MESSAGE();
 END CATCH
 PRINT '';
 
@@ -454,26 +454,26 @@ BEGIN TRY
     
     -- Verificar que se insertó la oferta
     IF EXISTS (SELECT 1 FROM auction.Bid WHERE AuctionId = @AuctionId AND BidderId = @BidderId1)
-        PRINT '✓ Oferta insertada correctamente';
+        PRINT 'Oferta insertada correctamente';
     ELSE
-        PRINT '✗ ERROR: Oferta no insertada';
+        PRINT 'ERROR: Oferta no insertada';
     
     -- Verificar que se actualizó el precio actual
     DECLARE @NewPrice DECIMAL(38,18) = (SELECT CurrentPriceETH FROM auction.Auction WHERE AuctionId = @AuctionId);
     IF @NewPrice = @CurrentPrice + 0.1
-        PRINT '✓ Precio actual actualizado correctamente';
+        PRINT 'Precio actual actualizado correctamente';
     ELSE
-        PRINT '✗ ERROR: Precio actual no actualizado';
+        PRINT 'ERROR: Precio actual no actualizado';
     
     -- Verificar emails
     IF EXISTS (SELECT 1 FROM audit.EmailOutbox WHERE [Subject] LIKE '%Oferta Aceptada%')
-        PRINT '✓ Email de confirmación enviado al oferente';
+        PRINT 'Email de confirmación enviado al oferente';
     ELSE
-        PRINT '✗ ERROR: No se envió email de confirmación';
+        PRINT 'ERROR: No se envió email de confirmación';
     
 END TRY
 BEGIN CATCH
-    PRINT '✗ ERROR: ' + ERROR_MESSAGE();
+    PRINT 'ERROR: ' + ERROR_MESSAGE();
 END CATCH
 PRINT '';
 
@@ -489,19 +489,19 @@ BEGIN TRY
     
     -- Verificar que NO se insertó
     IF NOT EXISTS (SELECT 1 FROM auction.Bid WHERE AuctionId = @AuctionId AND BidderId = @BidderId2)
-        PRINT '✓ Oferta rechazada correctamente (menor al precio actual)';
+        PRINT 'Oferta rechazada correctamente (menor al precio actual)';
     ELSE
-        PRINT '✗ ERROR: Oferta insertada cuando debería ser rechazada';
+        PRINT 'ERROR: Oferta insertada cuando debería ser rechazada';
     
     -- Verificar email de rechazo
     IF EXISTS (SELECT 1 FROM audit.EmailOutbox WHERE RecipientUserId = @BidderId2 AND [Subject] LIKE '%Rechazada%')
-        PRINT '✓ Email de rechazo enviado';
+        PRINT 'Email de rechazo enviado';
     ELSE
-        PRINT '✗ ERROR: No se envió email de rechazo';
+        PRINT 'ERROR: No se envió email de rechazo';
     
 END TRY
 BEGIN CATCH
-    PRINT '✗ ERROR: ' + ERROR_MESSAGE();
+    PRINT 'ERROR: ' + ERROR_MESSAGE();
 END CATCH
 PRINT '';
 
@@ -517,26 +517,26 @@ BEGIN TRY
     
     -- Verificar que se insertó
     IF EXISTS (SELECT 1 FROM auction.Bid WHERE AuctionId = @AuctionId AND BidderId = @BidderId3)
-        PRINT '✓ Segunda oferta insertada correctamente';
+        PRINT 'Segunda oferta insertada correctamente';
     ELSE
-        PRINT '✗ ERROR: Segunda oferta no insertada';
+        PRINT 'ERROR: Segunda oferta no insertada';
     
     -- Verificar que el líder cambió
     DECLARE @NewLeader BIGINT = (SELECT CurrentLeaderId FROM auction.Auction WHERE AuctionId = @AuctionId);
     IF @NewLeader = @BidderId3
-        PRINT '✓ Líder actualizado correctamente';
+        PRINT 'Líder actualizado correctamente';
     ELSE
-        PRINT '✗ ERROR: Líder no actualizado';
+        PRINT 'ERROR: Líder no actualizado';
     
     -- Verificar email al líder anterior
     IF EXISTS (SELECT 1 FROM audit.EmailOutbox WHERE RecipientUserId = @BidderId1 AND [Subject] LIKE '%superado%')
-        PRINT '✓ Email enviado al líder anterior';
+        PRINT 'Email enviado al líder anterior';
     ELSE
-        PRINT '✗ ERROR: No se notificó al líder anterior';
+        PRINT 'ERROR: No se notificó al líder anterior';
     
 END TRY
 BEGIN CATCH
-    PRINT '✗ ERROR: ' + ERROR_MESSAGE();
+    PRINT 'ERROR: ' + ERROR_MESSAGE();
 END CATCH
 PRINT '';
 
