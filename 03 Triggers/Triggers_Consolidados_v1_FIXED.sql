@@ -2,7 +2,6 @@
 -- TRIGGERS CONSOLIDADOS - Sistema de Subastas NFT (VERSIÓN CORREGIDA)
 -- Proyecto: ArteCryptoAuctions
 -- Descripción: Triggers para gestión completa del flujo NFT → Curación → Subasta
--- Fix: Eliminadas subqueries en OUTPUT clause
 -- =====================================================================================
 
 USE ArteCryptoAuctions;
@@ -958,6 +957,6 @@ GO
 -- SCRIPT DE VERIFICACIÓN
 -- =====================================================================================
 PRINT '=====================================================================================';
-PRINT 'TRIGGERS CONSOLIDADOS CREADOS EXITOSAMENTE';
+PRINT 'TRIGGERS CREADOS EXITOSAMENTE';
 PRINT '=====================================================================================';
 GO

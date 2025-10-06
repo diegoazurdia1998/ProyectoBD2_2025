@@ -27,8 +27,8 @@ DELETE FROM nft.NFT;
 DELETE FROM core.Wallet;
 DELETE FROM core.UserEmail;
 DELETE FROM core.UserRole;
-DELETE FROM core.[User];
 DELETE FROM audit.EmailOutbox;
+DELETE FROM core.[User];
 
 PRINT 'Datos limpiados.';
 PRINT '';
