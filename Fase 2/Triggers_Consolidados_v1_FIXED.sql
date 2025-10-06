@@ -958,28 +958,6 @@ GO
 -- SCRIPT DE VERIFICACIÓN
 -- =====================================================================================
 PRINT '=====================================================================================';
-PRINT 'TRIGGERS CONSOLIDADOS CREADOS EXITOSAMENTE (VERSIÓN CORREGIDA)';
-PRINT '=====================================================================================';
-PRINT '';
-PRINT 'Triggers creados:';
-PRINT '1. nft.tr_NFT_InsertFlow - Validación e inserción de NFTs con asignación de curador';
-PRINT '2. admin.tr_CurationReview_Decision - Procesamiento de decisiones de curación';
-PRINT '3. nft.tr_NFT_CreateAuction - Creación automática de subastas para NFTs aprobados';
-PRINT '4. auction.tr_Bid_Validation - Validación y procesamiento de ofertas';
-PRINT '';
-PRINT 'Correcciones aplicadas:';
-PRINT '  ✓ Eliminadas subqueries en OUTPUT clause (Triggers 1 y 3)';
-PRINT '  ✓ Uso de tablas temporales para JOIN posterior';
-PRINT '  ✓ Compatible con SQL Server 2016+';
-PRINT '';
-PRINT 'Flujo completo implementado:';
-PRINT '  NFT Insert → Validación → Asignación Curador → Notificaciones';
-PRINT '  ↓';
-PRINT '  Decisión Curador → Actualización Estado → Notificaciones';
-PRINT '  ↓';
-PRINT '  Si APPROVED → Crear Subasta → Notificaciones';
-PRINT '  ↓';
-PRINT '  Ofertas → Validación → Actualización Líder → Notificaciones';
-PRINT '';
+PRINT 'TRIGGERS CONSOLIDADOS CREADOS EXITOSAMENTE';
 PRINT '=====================================================================================';
 GO
