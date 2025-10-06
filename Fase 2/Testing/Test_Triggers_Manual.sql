@@ -2,7 +2,6 @@
 -- PRUEBAS MANUALES PASO A PASO - Triggers ArteCryptoAuctions
 -- =====================================================================================
 -- Este script te permite probar los triggers de forma interactiva
--- Ejecuta cada sección una por una y observa los resultados
 -- =====================================================================================
 
 USE ArteCryptoAuctions;
@@ -11,6 +10,10 @@ GO
 -- =====================================================================================
 -- PASO 0: PREPARACIÓN (Ejecutar primero)
 -- =====================================================================================
+
+USE ArteCryptoAuctions;
+GO
+
 PRINT '=== PASO 0: PREPARACIÓN ===';
 PRINT 'Limpiando datos de prueba...';
 
@@ -98,6 +101,10 @@ GO
 -- =====================================================================================
 -- PASO 1: INSERTAR UN NFT (Trigger: tr_NFT_InsertFlow)
 -- =====================================================================================
+
+USE ArteCryptoAuctions;
+GO
+
 PRINT '=== PASO 1: INSERTAR NFT ===';
 PRINT 'Insertando NFT de prueba...';
 PRINT '';
@@ -176,6 +183,10 @@ GO
 -- =====================================================================================
 -- PASO 2: APROBAR EL NFT (Trigger: tr_CurationReview_Decision)
 -- =====================================================================================
+
+USE ArteCryptoAuctions;
+GO
+
 PRINT '=== PASO 2: APROBAR NFT ===';
 PRINT 'El curador aprueba el NFT...';
 PRINT '';
@@ -240,6 +251,10 @@ GO
 -- =====================================================================================
 -- PASO 3: VERIFICAR SUBASTA CREADA (Trigger: tr_NFT_CreateAuction)
 -- =====================================================================================
+
+USE ArteCryptoAuctions;
+GO
+
 PRINT '=== PASO 3: VERIFICAR SUBASTA AUTOMÁTICA ===';
 PRINT 'La subasta debería haberse creado automáticamente...';
 PRINT '';
@@ -273,6 +288,10 @@ GO
 -- =====================================================================================
 -- PASO 4: HACER OFERTAS (Trigger: tr_Bid_Validation)
 -- =====================================================================================
+
+USE ArteCryptoAuctions;
+GO
+
 PRINT '=== PASO 4: HACER OFERTAS ===';
 PRINT 'Los oferentes participan en la subasta...';
 PRINT '';
@@ -355,6 +374,10 @@ GO
 -- =====================================================================================
 -- PASO 5: INTENTAR OFERTA INVÁLIDA
 -- =====================================================================================
+
+USE ArteCryptoAuctions;
+GO
+
 PRINT '=== PASO 5: PROBAR VALIDACIONES ===';
 PRINT 'Intentando hacer una oferta menor al precio actual...';
 PRINT '';
@@ -393,6 +416,10 @@ GO
 -- =====================================================================================
 -- PASO 6: RESUMEN FINAL
 -- =====================================================================================
+
+USE ArteCryptoAuctions;
+GO
+
 PRINT '=== RESUMEN FINAL ===';
 PRINT '';
 
