@@ -392,18 +392,6 @@ SELECT COUNT(*) FROM nft.NFT;
 - Libro mayor de transacciones
 - Validación de saldos
 
----
-
-## 🛠️ Tecnologías Utilizadas
-
-- **Base de Datos**: SQL Server 2016+
-- **Lenguaje**: T-SQL
-- **Generación de Datos**: Python 3.8+
-- **Control de Versiones**: Git
-- **Documentación**: Markdown
-
----
-
 ## 📊 Esquemas de la Base de Datos
 
 | Esquema | Tablas | Propósito |
@@ -418,57 +406,3 @@ SELECT COUNT(*) FROM nft.NFT;
 
 **Total: 7 esquemas, 16 tablas**
 
-Para más detalles, consulta: `00 Documentacion/ESQUEMAS_Y_TABLAS.md`
-
----
-
-## 📝 Documentación Adicional
-
-- **Guía de Esquemas**: `00 Documentacion/ESQUEMAS_Y_TABLAS.md`
-- **Referencia Rápida**: `00 Documentacion/REFERENCIA_RAPIDA.txt`
-- **Guía de Testing**: `04Testing/README_Testing.md`
-- **Inicio Rápido Testing**: `04Testing/INICIO_RAPIDO.md`
-- **Generador de Datos**: `05 Data Gen/README.md`
-
----
-
-## 👥 Equipo de Desarrollo
-
-Proyecto desarrollado para el curso de **Bases de Datos II - 2025**
-
----
-
-## 📄 Licencia
-
-Este proyecto es de uso académico para el curso de Bases de Datos II.
-
----
-
-## 🔗 Enlaces Útiles
-
-- [Documentación SQL Server](https://docs.microsoft.com/sql/)
-- [T-SQL Reference](https://docs.microsoft.com/sql/t-sql/)
-- [Triggers en SQL Server](https://docs.microsoft.com/sql/relational-databases/triggers/)
-
----
-
-## 📞 Soporte
-
-Para preguntas o problemas:
-1. Revisa la documentación en `00 Documentacion/`
-2. Consulta los scripts de testing en `04Testing/`
-3. Revisa los ejemplos en `05 Data Gen/`
-
----
-
-**Última actualización**: Enero 2025  
-**Versión**: 6.0  
-**Estado**: ✅ Producción
-
----
-
-<div align="center">
-  <strong>🎨 ArteCryptoAuctions - Sistema de Subastas NFT</strong>
-  <br>
-  <em>Bases de Datos II - 2025</em>
-</div>
