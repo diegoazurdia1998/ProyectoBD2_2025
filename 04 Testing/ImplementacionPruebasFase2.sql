@@ -1149,3 +1149,64 @@ PRINT '';
 -- =====================================================================================
 -- CP-T3-010: Timestamp de Inicio Inmediato
 -- =====================================================================================
+PRINT '--- CP-T3-010: Timestamp de Inicio Inmediato ---';
+SET @TotalTests = @TotalTests + 1;
+BEGIN TRY
+    -- Registrar timestamp antes de aprobar
+    DECLARE @TimestampBeforeApproval DATETIME2(3) = SYSUTCDATETIME();
+    
+    -- Crear y aprobar NFT
+    INSERT INTO nft.NFT(ArtistId, SettingsID, [Name], [Description], ContentType, FileSizeBytes, WidthPx, HeightPx, SuggestedPriceETH, StatusCode, CreatedAtUtc)
+    VALUES(@ArtistId1, 1, 'NFT Inicio Inmediato', 'Prueba timestamp de inicio', 'image/png', 2048000, 1920, 1080, 0.5, 'PENDING', SYSUTCDATETIME());
+    
+    DECLARE @NFTInmediato BIGINT = (SELECT NFTId FROM nft.NFT WHERE [Name] = 'NFT Inicio Inmediato');
+    DECLARE @ReviewInmediato BIGINT = (SELECT ReviewId FROM admin.CurationReview WHERE NFTId = @NFTInmediato);
+    
+    -- Aprobar
+    UPDATE admin.CurationReview SET DecisionCode = 'APPROVED', ReviewedAtUtc = SYSUTCDATETIME() WHERE ReviewId = @ReviewInmediato;
+    
+    -- Obtener StartAtUtc de la subasta creada
+    DECLARE @AuctionStartTime DATETIME2(3) = (SELECT StartAtUtc FROM auction.Auction WHERE NFTId = @NFTInmediato);
+    DECLARE @TimestampAfterApproval DATETIME2(3) = SYSUTCDATETIME();
+    
+    -- Calcular diferencia en segundos
+    DECLARE @DiffSeconds INT = DATEDIFF(SECOND, @TimestampBeforeApproval, @AuctionStartTime);
+    DECLARE @DiffSecondsAfter INT = DATEDIFF(SECOND, @AuctionStartTime, @TimestampAfterApproval);
+    
+    -- Verificar que la diferencia es menor a 2 segundos (tolerancia para procesamiento)
+    IF @DiffSeconds >= 0 AND @DiffSeconds <= 2 AND @DiffSecondsAfter >= 0 AND @DiffSecondsAfter <= 2
+    BEGIN
+        SET @PassedTests = @PassedTests + 1;
+        PRINT 'RESULTADO: EXITOSO';
+        PRINT 'StartAtUtc es aproximadamente igual al timestamp de aprobación';
+        PRINT 'Diferencia: ' + CAST(@DiffSeconds AS VARCHAR) + ' segundos';
+    END
+    ELSE
+    BEGIN
+        SET @FailedTests = @FailedTests + 1;
+        PRINT 'RESULTADO: FALLIDO';
+        PRINT 'Diferencia de tiempo excede el límite aceptable';
+        PRINT 'Diferencia: ' + CAST(@DiffSeconds AS VARCHAR) + ' segundos';
+    END
+END TRY
+BEGIN CATCH
+    SET @FailedTests = @FailedTests + 1;
+    PRINT 'RESULTADO: FALLIDO';
+    PRINT 'ERROR: ' + ERROR_MESSAGE();
+END CATCH
+PRINT '';
+
+-- =====================================================================================
+-- FIN DE CASOS DE PRUEBA
+-- =====================================================================================
+PRINT '=====================================================================================';
+PRINT 'EJECUCIÓN DE PRUEBAS COMPLETADA';
+PRINT '=====================================================================================';
+PRINT '';
+PRINT 'Total de Pruebas Ejecutadas: ' + CAST(@TotalTests AS VARCHAR);
+PRINT 'Pruebas Exitosas: ' + CAST(@PassedTests AS VARCHAR);
+PRINT 'Pruebas Fallidas: ' + CAST(@FailedTests AS VARCHAR);
+PRINT 'Porcentaje de Éxito: ' + CAST((@PassedTests * 100.0 / @TotalTests) AS VARCHAR(10)) + '%';
+PRINT '';
+PRINT '=====================================================================================';
+GO
