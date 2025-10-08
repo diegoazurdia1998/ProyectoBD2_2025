@@ -6,4 +6,8 @@ select * from core.UserEmail
 
 select * from auction.AuctionSettings
 
+select * from auction.Auction
+
 select * from nft.NFTSettings
+
+select * from audit.EmailOutbox

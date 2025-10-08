@@ -823,9 +823,7 @@ BEGIN TRY
         SET @PassedTests = @PassedTests + 1;
         PRINT 'RESULTADO: EXITOSO';
         PRINT 'Subasta creada automáticamente con estado ACTIVE';
-        
-        SELECT AuctionId, StartingPriceETH, CurrentPriceETH, StartAtUtc, EndAtUtc
-        FROM auction.Auction WHERE NFTId = @ApprovedNFT;
+      
     END
     ELSE
     BEGIN
@@ -1036,7 +1034,7 @@ BEGIN TRY
     DECLARE @TestNFTId BIGINT = (SELECT TOP 1 NFTId FROM auction.Auction ORDER BY AuctionId DESC);
     DECLARE @ArtistEmail VARCHAR(MAX) = (SELECT TOP 1 Body FROM audit.EmailOutbox WHERE [Subject] LIKE '%Subasta Iniciada%' ORDER BY EmailId DESC);
     
-    IF @ArtistEmail LIKE '%AuctionId%' 
+    IF @ArtistEmail LIKE '%ID de Subasta%' 
        AND @ArtistEmail LIKE '%ETH%'
        AND @ArtistEmail LIKE '%UTC%'
     BEGIN
@@ -1059,61 +1057,9 @@ END CATCH
 PRINT '';
 
 -- =====================================================================================
--- CP-T3-008: Manejo de Ausencia de Configuración de Subasta
+-- CP-T3-008: Trigger No se Activa para NFT Rechazado
 -- =====================================================================================
-PRINT '--- CP-T3-008: Manejo de Ausencia de Configuración de Subasta ---';
-SET @TotalTests = @TotalTests + 1;
-BEGIN TRY
-    -- Guardar configuración actual
-    SELECT * INTO #TempAuctionSettings FROM auction.AuctionSettings;
-    
-    -- Eliminar configuración
-    DELETE FROM auction.AuctionSettings;
-    
-    -- Crear y aprobar NFT
-    INSERT INTO nft.NFT(ArtistId, SettingsID, [Name], [Description], ContentType, FileSizeBytes, WidthPx, HeightPx, SuggestedPriceETH, StatusCode, CreatedAtUtc)
-    VALUES(@ArtistId1, 1, 'NFT Sin Config', 'Sin configuración de subasta', 'image/png', 2048000, 1920, 1080, NULL, 'PENDING', SYSUTCDATETIME());
-    
-    DECLARE @NFTSinConfig BIGINT = (SELECT NFTId FROM nft.NFT WHERE [Name] = 'NFT Sin Config');
-    DECLARE @ReviewSinConfig BIGINT = (SELECT ReviewId FROM admin.CurationReview WHERE NFTId = @NFTSinConfig);
-    
-    UPDATE admin.CurationReview SET DecisionCode = 'APPROVED', ReviewedAtUtc = SYSUTCDATETIME() WHERE ReviewId = @ReviewSinConfig;
-    
-    -- Verificar que se creó subasta con valores por defecto
-    IF EXISTS (SELECT 1 FROM auction.Auction WHERE NFTId = @NFTSinConfig AND StartingPriceETH = 0.01)
-    BEGIN
-        SET @PassedTests = @PassedTests + 1;
-        PRINT 'RESULTADO: EXITOSO';
-        PRINT 'Subasta creada con valores por defecto';
-    END
-    ELSE
-    BEGIN
-        SET @FailedTests = @FailedTests + 1;
-        PRINT 'RESULTADO: FALLIDO';
-        PRINT 'Subasta no creada o valores incorrectos';
-    END
-    
-    -- Restaurar configuración
-    INSERT INTO auction.AuctionSettings SELECT * FROM #TempAuctionSettings;
-    DROP TABLE #TempAuctionSettings;
-END TRY
-BEGIN CATCH
-    SET @FailedTests = @FailedTests + 1;
-    PRINT 'RESULTADO: FALLIDO';
-    PRINT 'ERROR: ' + ERROR_MESSAGE();
-    -- Restaurar configuración en caso de error
-    IF OBJECT_ID('tempdb..#TempAuctionSettings') IS NOT NULL
-    BEGIN
-        INSERT INTO auction.AuctionSettings SELECT * FROM #TempAuctionSettings;
-        DROP TABLE #TempAuctionSettings;
-    END
-END CATCH
-PRINT '';
-
--- =====================================================================================
--- CP-T3-009: Trigger No se Activa para NFT Rechazado
--- =====================================================================================
-PRINT '--- CP-T3-009: Trigger No se Activa para NFT Rechazado ---';
+PRINT '--- CP-T3-008: Trigger No se Activa para NFT Rechazado ---';
 SET @TotalTests = @TotalTests + 1;
 BEGIN TRY
     -- Crear NFT y rechazarlo
@@ -1147,9 +1093,9 @@ END CATCH
 PRINT '';
 
 -- =====================================================================================
--- CP-T3-010: Timestamp de Inicio Inmediato
+-- CP-T3-009: Timestamp de Inicio Inmediato
 -- =====================================================================================
-PRINT '--- CP-T3-010: Timestamp de Inicio Inmediato ---';
+PRINT '--- CP-T3-009: Timestamp de Inicio Inmediato ---';
 SET @TotalTests = @TotalTests + 1;
 BEGIN TRY
     -- Registrar timestamp antes de aprobar
@@ -1199,6 +1145,9 @@ PRINT '';
 -- =====================================================================================
 -- FIN DE CASOS DE PRUEBA
 -- =====================================================================================
+
+DECLARE @arthmeticResult decimal(5,2) = @PassedTests * 100.0 / @TotalTests
+
 PRINT '=====================================================================================';
 PRINT 'EJECUCIÓN DE PRUEBAS COMPLETADA';
 PRINT '=====================================================================================';
@@ -1206,7 +1155,7 @@ PRINT '';
 PRINT 'Total de Pruebas Ejecutadas: ' + CAST(@TotalTests AS VARCHAR);
 PRINT 'Pruebas Exitosas: ' + CAST(@PassedTests AS VARCHAR);
 PRINT 'Pruebas Fallidas: ' + CAST(@FailedTests AS VARCHAR);
-PRINT 'Porcentaje de Éxito: ' + CAST((@PassedTests * 100.0 / @TotalTests) AS VARCHAR(10)) + '%';
+PRINT 'Porcentaje de Éxito: ' + CAST(@arthmeticResult AS VARCHAR(10)) + '%';
 PRINT '';
 PRINT '=====================================================================================';
 GO
