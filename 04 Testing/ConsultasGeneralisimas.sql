@@ -1,3 +1,5 @@
+select * from ops.Status
+
 select * from core."User"
 
 select * from core.UserRole
@@ -7,6 +9,8 @@ select * from core.UserEmail
 select * from auction.AuctionSettings
 
 select * from auction.Auction
+
+select * from nft.NFT
 
 select * from nft.NFTSettings
 
