@@ -775,7 +775,8 @@ END;
 GO
 
 -- =====================================================================================
--- TRIGGER 4: Validar y procesar ofertas (Bids)
+-- TRIGGER 4: Validar y procesar ofertas (Bids) - VERSIÓN REFACTORIZADA
+-- Descripción: Usa funciones para validación e implementa la reserva de fondos.
 -- =====================================================================================
 CREATE OR ALTER TRIGGER auction.tr_Bid_Validation
 ON auction.Bid
@@ -783,176 +784,183 @@ INSTEAD OF INSERT
 AS
 BEGIN
     SET NOCOUNT ON;
-    
+
+    -- Usamos un nivel de aislamiento alto para prevenir condiciones de carrera
+    -- durante la validación y actualización del precio de la subasta.
+    SET TRANSACTION ISOLATION LEVEL REPEATABLE READ;
+
     BEGIN TRY
         DECLARE @ErrorMsg NVARCHAR(MAX);
-        
-        -- Tabla para validar bids
+
+        -- -------------------------------------------------------------------
+        -- 1) Capturar y validar las ofertas entrantes en un solo paso
+        -- -------------------------------------------------------------------
         DECLARE @InputBids TABLE(
-            RowNum INT IDENTITY(1,1),
+            RowNum INT IDENTITY(1,1) PRIMARY KEY,
             AuctionId BIGINT,
             BidderId BIGINT,
+            ArtistId BIGINT,
             AmountETH DECIMAL(38,18),
-            PlacedAtUtc DATETIME2(3)
-        );
-
-        INSERT INTO @InputBids
-        SELECT AuctionId, BidderId, AmountETH, PlacedAtUtc
-        FROM inserted;
-
-        -------------------------------------------------------------------
-        -- Validaciones
-        -------------------------------------------------------------------
-        DECLARE @ValidationErrors TABLE(
-            BidderId BIGINT,
-            BidderEmail NVARCHAR(100),
-            AuctionId BIGINT,
+            PlacedAtUtc DATETIME2(3),
+            CurrentPriceETH DECIMAL(38,18),
+            MinNextBid DECIMAL(38,18),
+            AvailableBalance DECIMAL(38,18),
+            OldLeaderId BIGINT,
+            AuctionStatusCode VARCHAR(30),
+            AuctionEndAtUtc DATETIME2(3),
             ErrorMessage NVARCHAR(500)
         );
 
-        -- Validar que la subasta existe y está activa
-        INSERT INTO @ValidationErrors
+        -- Se recopilan todos los datos necesarios para la validación de una sola vez
+        INSERT INTO @InputBids(
+            AuctionId, BidderId, AmountETH, PlacedAtUtc,
+            ArtistId, CurrentPriceETH, AuctionStatusCode, AuctionEndAtUtc,
+            MinNextBid, AvailableBalance
+        )
         SELECT 
-            ib.BidderId,
-            (SELECT TOP 1 ue.Email 
-             FROM core.UserEmail ue 
-             WHERE ue.UserId = ib.BidderId AND ue.IsPrimary = 1),
-            ib.AuctionId,
-            CASE 
-                WHEN a.AuctionId IS NULL THEN N'La subasta no existe'
-                WHEN a.StatusCode <> 'ACTIVE' THEN N'La subasta no está activa'
-                WHEN SYSUTCDATETIME() < a.StartAtUtc THEN N'La subasta aún no ha comenzado'
-                WHEN SYSUTCDATETIME() > a.EndAtUtc THEN N'La subasta ya finalizó'
-                WHEN ib.AmountETH <= a.CurrentPriceETH THEN N'La oferta debe ser mayor al precio actual (' + CAST(a.CurrentPriceETH AS NVARCHAR(50)) + N' ETH)'
-                WHEN ib.BidderId = nft.ArtistId THEN N'El artista no puede ofertar en su propia subasta'
-                ELSE NULL
-            END
-        FROM @InputBids ib
-        LEFT JOIN auction.Auction a ON a.AuctionId = ib.AuctionId
-        LEFT JOIN nft.NFT nft ON nft.NFTId = a.NFTId
-        WHERE a.AuctionId IS NULL
-           OR a.StatusCode <> 'ACTIVE'
-           OR SYSUTCDATETIME() < a.StartAtUtc
-           OR SYSUTCDATETIME() > a.EndAtUtc
-           OR ib.AmountETH <= a.CurrentPriceETH
-           OR ib.BidderId = nft.ArtistId;
+            i.AuctionId, i.BidderId, i.AmountETH, i.PlacedAtUtc,
+            nft.ArtistId,
+            a.CurrentPriceETH,
+            a.StatusCode,
+            a.EndAtUtc,
+            -- Uso de las nuevas funciones para validación
+            auction.fn_GetMinNextBid(i.AuctionId),
+            finance.fn_GetAvailableBalance(i.BidderId)
+        FROM inserted i
+        LEFT JOIN auction.Auction a ON a.AuctionId = i.AuctionId
+        LEFT JOIN nft.NFT nft ON nft.NFTId = a.NFTId;
 
-        -- Si hay errores, notificar y salir
-        IF EXISTS (SELECT 1 FROM @ValidationErrors)
+        -- Se generan los mensajes de error basados en los datos recolectados
+        UPDATE @InputBids
+        SET ErrorMessage = 
+            CASE
+                WHEN AuctionStatusCode IS NULL THEN N'La subasta no existe.'
+                WHEN AuctionStatusCode <> 'ACTIVE' THEN N'La subasta no está activa.'
+                WHEN AuctionEndAtUtc < SYSUTCDATETIME() THEN N'La subasta ya ha finalizado.'
+                WHEN ArtistId = BidderId THEN N'El artista no puede ofertar en su propia obra.'
+                WHEN AmountETH < MinNextBid THEN N'Su oferta es muy baja. Se requiere al menos ' + CAST(MinNextBid AS NVARCHAR(50)) + N' ETH.'
+                WHEN AvailableBalance < AmountETH THEN N'Saldo insuficiente. Su saldo disponible es de ' + CAST(AvailableBalance AS NVARCHAR(50)) + N' ETH.'
+                ELSE NULL
+            END;
+
+        -- -------------------------------------------------------------------
+        -- 2) Si hay errores, notificar y detener el proceso
+        -- -------------------------------------------------------------------
+        IF EXISTS (SELECT 1 FROM @InputBids WHERE ErrorMessage IS NOT NULL)
         BEGIN
-            INSERT INTO audit.EmailOutbox(RecipientUserId, RecipientEmail, [Subject], [Body], StatusCode)
-            SELECT 
-                ve.BidderId,
-                ve.BidderEmail,
+            INSERT INTO audit.EmailOutbox(RecipientUserId, RecipientEmail, [Subject], [Body])
+            SELECT
+                ib.BidderId,
+                ue.Email,
                 N'Oferta Rechazada',
-                N'Su oferta en la subasta #' + CAST(ve.AuctionId AS NVARCHAR(20)) + N' no pudo ser procesada.' + CHAR(13) + CHAR(10) +
-                N'Razón: ' + ve.ErrorMessage,
-                'PENDING'
-            FROM @ValidationErrors ve
-            WHERE ve.ErrorMessage IS NOT NULL;
+                N'Su oferta en la subasta #' + CAST(ib.AuctionId AS NVARCHAR(20)) + N' no pudo ser procesada. Razón: ' + ib.ErrorMessage
+            FROM @InputBids ib
+            JOIN core.UserEmail ue ON ue.UserId = ib.BidderId AND ue.IsPrimary = 1
+            WHERE ib.ErrorMessage IS NOT NULL;
             
-            RETURN;
+            RETURN; -- Detiene la ejecución del trigger
         END;
 
-        -------------------------------------------------------------------
-        -- Insertar bids válidos
-        -------------------------------------------------------------------
-        DECLARE @NewBids TABLE(
-            BidId BIGINT,
-            AuctionId BIGINT,
-            BidderId BIGINT,
-            AmountETH DECIMAL(38,18),
-            PlacedAtUtc DATETIME2(3)
-        );
+        -- -------------------------------------------------------------------
+        -- 3) Procesar las ofertas válidas una por una para manejar la lógica de fondos
+        -- -------------------------------------------------------------------
+        DECLARE @CurrentRow INT = 1;
+        DECLARE @TotalRows INT = (SELECT COUNT(*) FROM @InputBids);
+        DECLARE @AuctionId BIGINT, @BidderId BIGINT, @AmountETH DECIMAL(38,18), @OldLeaderId BIGINT;
 
-        INSERT INTO auction.Bid(AuctionId, BidderId, AmountETH, PlacedAtUtc)
-        OUTPUT 
-            inserted.BidId,
-            inserted.AuctionId,
-            inserted.BidderId,
-            inserted.AmountETH,
-            inserted.PlacedAtUtc
-        INTO @NewBids
-        SELECT AuctionId, BidderId, AmountETH, PlacedAtUtc
-        FROM @InputBids;
+        WHILE @CurrentRow <= @TotalRows
+        BEGIN
+            -- Obtener la oferta actual a procesar
+            SELECT 
+                @AuctionId = AuctionId,
+                @BidderId = BidderId,
+                @AmountETH = AmountETH
+            FROM @InputBids WHERE RowNum = @CurrentRow;
 
-        -------------------------------------------------------------------
-        -- Actualizar CurrentPriceETH y CurrentLeaderId en Auction
-        -------------------------------------------------------------------
-        UPDATE a
-        SET 
-            CurrentPriceETH = nb.AmountETH,
-            CurrentLeaderId = nb.BidderId
-        FROM auction.Auction a
-        JOIN @NewBids nb ON nb.AuctionId = a.AuctionId;
+            BEGIN TRANSACTION; -- Inicia una transacción para asegurar la atomicidad
 
-        -------------------------------------------------------------------
+            -- Obtener el líder anterior DENTRO de la transacción para bloquear la fila
+            SELECT @OldLeaderId = CurrentLeaderId 
+            FROM auction.Auction WITH (UPDLOCK) 
+            WHERE AuctionId = @AuctionId;
+            
+            -- A) LIBERAR FONDOS DEL LÍDER ANTERIOR (si existe y es diferente del nuevo postor)
+            IF @OldLeaderId IS NOT NULL AND @OldLeaderId <> @BidderId
+            BEGIN
+                DECLARE @OldBidAmount DECIMAL(38,18);
+
+                -- Obtener el monto de la reserva anterior que estaba activa
+                SELECT @OldBidAmount = AmountETH 
+                FROM finance.FundsReservation 
+                WHERE AuctionId = @AuctionId AND UserId = @OldLeaderId AND StateCode = 'ACTIVE';
+                
+                IF @OldBidAmount IS NOT NULL
+                BEGIN
+                    -- Actualizar billetera del líder anterior
+                    UPDATE core.Wallet SET ReservedETH = ReservedETH - @OldBidAmount WHERE UserId = @OldLeaderId;
+                    -- Marcar la reserva como liberada
+                    UPDATE finance.FundsReservation SET StateCode = 'RELEASED', UpdatedAtUtc = SYSUTCDATETIME() WHERE AuctionId = @AuctionId AND UserId = @OldLeaderId AND StateCode = 'ACTIVE';
+                END
+            END
+
+            -- B) RESERVAR FONDOS DEL NUEVO LÍDER
+            UPDATE core.Wallet SET ReservedETH = ReservedETH + @AmountETH WHERE UserId = @BidderId;
+
+            -- C) INSERTAR EL REGISTRO DE LA OFERTA
+            DECLARE @NewBidId BIGINT;
+            INSERT INTO auction.Bid(AuctionId, BidderId, AmountETH)
+            VALUES (@AuctionId, @BidderId, @AmountETH);
+            SET @NewBidId = SCOPE_IDENTITY(); -- Capturar el ID de la nueva oferta
+
+            -- D) CREAR LA NUEVA RESERVA DE FONDOS
+            INSERT INTO finance.FundsReservation(UserId, AuctionId, BidId, AmountETH, StateCode)
+            VALUES(@BidderId, @AuctionId, @NewBidId, @AmountETH, 'ACTIVE');
+
+            -- E) ACTUALIZAR LA SUBASTA con el nuevo precio y líder
+            UPDATE auction.Auction 
+            SET CurrentPriceETH = @AmountETH, CurrentLeaderId = @BidderId 
+            WHERE AuctionId = @AuctionId;
+
+            COMMIT TRANSACTION; -- Confirmar todos los cambios si no hubo errores
+
+            -- F) GESTIONAR NOTIFICACIONES (fuera de la transacción principal)
+            -- (La lógica de notificaciones se ha movido al final para mayor claridad)
+
+            SET @CurrentRow = @CurrentRow + 1;
+        END;
+
+        -- -------------------------------------------------------------------
+        -- 4) Enviar todas las notificaciones después de procesar
+        -- -------------------------------------------------------------------
         -- Notificar al nuevo líder
-        -------------------------------------------------------------------
-        INSERT INTO audit.EmailOutbox(RecipientUserId, RecipientEmail, [Subject], [Body], StatusCode)
-        SELECT 
-            nb.BidderId,
-            (SELECT TOP 1 ue.Email 
-             FROM core.UserEmail ue 
-             WHERE ue.UserId = nb.BidderId AND ue.IsPrimary = 1),
-            N'¡Oferta Aceptada!',
-            N'Su oferta de ' + CAST(nb.AmountETH AS NVARCHAR(50)) + N' ETH ha sido aceptada.' + CHAR(13) + CHAR(10) +
-            N'Actualmente es el líder de la subasta #' + CAST(nb.AuctionId AS NVARCHAR(20)) + N'.',
-            'PENDING'
-        FROM @NewBids nb;
+        INSERT INTO audit.EmailOutbox(RecipientUserId, [Subject], [Body])
+        SELECT DISTINCT BidderId, N'¡Oferta Aceptada!', N'Su oferta de ' + CAST(AmountETH AS NVARCHAR(50)) + N' ETH ha sido aceptada. Ahora es el líder de la subasta #' + CAST(AuctionId AS NVARCHAR(20)) + N'.' FROM @InputBids;
 
-        -------------------------------------------------------------------
-        -- Notificar al líder anterior (si existe)
-        -------------------------------------------------------------------
-        INSERT INTO audit.EmailOutbox(RecipientUserId, RecipientEmail, [Subject], [Body], StatusCode)
-        SELECT DISTINCT
-            a.CurrentLeaderId,
-            (SELECT TOP 1 ue.Email 
-             FROM core.UserEmail ue 
-             WHERE ue.UserId = a.CurrentLeaderId AND ue.IsPrimary = 1),
-            N'Ha sido superado en la subasta',
-            N'Su oferta en la subasta #' + CAST(a.AuctionId AS NVARCHAR(20)) + N' ha sido superada.' + CHAR(13) + CHAR(10) +
-            N'Nueva oferta líder: ' + CAST(nb.AmountETH AS NVARCHAR(50)) + N' ETH',
-            'PENDING'
-        FROM @NewBids nb
-        JOIN auction.Auction a ON a.AuctionId = nb.AuctionId
-        WHERE a.CurrentLeaderId IS NOT NULL
-          AND a.CurrentLeaderId <> nb.BidderId;
+        -- Notificar al líder anterior (si existió)
+        INSERT INTO audit.EmailOutbox(RecipientUserId, [Subject], [Body])
+        SELECT DISTINCT OldLeaderId, N'Ha sido superado en la subasta', N'Su oferta en la subasta #' + CAST(AuctionId AS NVARCHAR(20)) + N' ha sido superada. La nueva oferta es de ' + CAST(AmountETH AS NVARCHAR(50)) + N' ETH.' FROM @InputBids WHERE OldLeaderId IS NOT NULL AND OldLeaderId <> BidderId;
 
-        -------------------------------------------------------------------
-        -- Notificar al artista sobre nueva oferta
-        -------------------------------------------------------------------
-        INSERT INTO audit.EmailOutbox(RecipientUserId, RecipientEmail, [Subject], [Body], StatusCode)
-        SELECT DISTINCT
-            nft.ArtistId,
-            (SELECT TOP 1 ue.Email 
-             FROM core.UserEmail ue 
-             WHERE ue.UserId = nft.ArtistId AND ue.IsPrimary = 1),
-            N'Nueva oferta en su NFT',
-            N'Su NFT "' + nft.[Name] + N'" ha recibido una nueva oferta de ' + CAST(nb.AmountETH AS NVARCHAR(50)) + N' ETH.',
-            'PENDING'
-        FROM @NewBids nb
-        JOIN auction.Auction a ON a.AuctionId = nb.AuctionId
-        JOIN nft.NFT nft ON nft.NFTId = a.NFTId;
+        -- Notificar al artista
+        INSERT INTO audit.EmailOutbox(RecipientUserId, [Subject], [Body])
+        SELECT DISTINCT ArtistId, N'Nueva oferta en su NFT', N'Su NFT ha recibido una nueva oferta de ' + CAST(AmountETH AS NVARCHAR(50)) + N' ETH en la subasta #' + CAST(AuctionId AS NVARCHAR(20)) + N'.' FROM @InputBids;
 
     END TRY
     BEGIN CATCH
+        IF @@TRANCOUNT > 0
+            ROLLBACK TRANSACTION; -- Revertir la transacción si algo falla
+
         SET @ErrorMsg = N'Error en tr_Bid_Validation: ' + ERROR_MESSAGE();
         
-        INSERT INTO audit.EmailOutbox(RecipientUserId, RecipientEmail, [Subject], [Body], StatusCode)
-        VALUES(
-            NULL,
-            'admin@artecryptoauctions.com',
-            N'Error en Sistema - Procesamiento de Oferta',
-            @ErrorMsg,
-            'PENDING'
-        );
-        
-        THROW;
+        -- Notificar al administrador del sistema sobre el error
+        INSERT INTO audit.EmailOutbox(RecipientEmail, [Subject], [Body])
+        VALUES('admin@artecryptoauctions.com', N'Error Crítico en Sistema - Procesamiento de Oferta', @ErrorMsg);
+            
+        THROW; -- Relanzar el error para que la aplicación lo reciba
     END CATCH
 END;
 GO
 
+PRINT 'Trigger auction.tr_Bid_Validation modificado y actualizado exitosamente.';
 -- =====================================================================================
 -- SCRIPT DE VERIFICACIÓN
 -- =====================================================================================
