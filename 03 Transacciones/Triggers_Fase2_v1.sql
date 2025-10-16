@@ -822,8 +822,7 @@ BEGIN
             nft.ArtistId,
             a.CurrentPriceETH,
             a.StatusCode,
-            a.EndAtUtc,
-            -- Uso de las nuevas funciones para validación
+            a.EndAtUtc, -- Uso de las nuevas funciones para validación
             auction.fn_GetMinNextBid(i.AuctionId),
             finance.fn_GetAvailableBalance(i.BidderId)
         FROM inserted i
@@ -923,12 +922,11 @@ BEGIN
 
             COMMIT TRANSACTION; -- Confirmar todos los cambios si no hubo errores
 
-            -- F) GESTIONAR NOTIFICACIONES (fuera de la transacción principal)
-            -- (La lógica de notificaciones se ha movido al final para mayor claridad)
 
             SET @CurrentRow = @CurrentRow + 1;
         END;
-
+		
+        -- F) GESTIONAR NOTIFICACIONES (fuera de la transacción principal)
         -- -------------------------------------------------------------------
         -- 4) Enviar todas las notificaciones después de procesar
         -- -------------------------------------------------------------------
@@ -959,8 +957,6 @@ BEGIN
     END CATCH
 END;
 GO
-
-PRINT 'Trigger auction.tr_Bid_Validation modificado y actualizado exitosamente.';
 -- =====================================================================================
 -- SCRIPT DE VERIFICACIÓN
 -- =====================================================================================

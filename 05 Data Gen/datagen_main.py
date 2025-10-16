@@ -30,7 +30,7 @@ def main():
     
     # Definir ruta de salida
     output_dir = os.path.dirname(os.path.abspath(__file__))
-    output_file = os.path.join(output_dir, "datos_generados.sql")
+    output_file = os.path.join(output_dir, "datos_generados_2.sql")
     
     print(f"Archivo de salida: {output_file}")
     print()
