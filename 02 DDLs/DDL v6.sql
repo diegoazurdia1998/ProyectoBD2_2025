@@ -1,3 +1,8 @@
+USE [master]
+GO
+DROP DATABASE ArteCryptoAuctions
+GO
+
 -- =====================================================================================
 -- DDL v6 - ArteCryptoAuctions (Versión Simplificada)
 -- Sistema de Subastas de NFTs
