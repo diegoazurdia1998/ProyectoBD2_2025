@@ -207,3 +207,4 @@ JOIN core.[User] u ON r.UserId = u.UserId
 WHERE r.StateCode = 'CAPTURED'; -- Solo nos interesa la reserva capturada
 GO
 
+

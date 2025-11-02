@@ -8,7 +8,7 @@ SELECT
     COUNT(cr.ReviewId) AS [NFTs revisados (total)],
 
     -- Calcula el promedio en horas, pero con precisión decimal
-    AVG(CAST(DATEDIFF(SECOND, cr.StartedAtUtc, cr.ReviewedAtUtc) AS DECIMAL(18, 2)) / 3600.0) AS [Tiempo promedio de revisión (horas)],
+    AVG(DATEDIFF(SECOND, cr.StartedAtUtc, cr.ReviewedAtUtc) / 3600.0) AS [Tiempo promedio de revisión (horas)],
 
     -- Concatena los totales para una fácil lectura
     CONCAT(
